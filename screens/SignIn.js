@@ -1,147 +1,191 @@
-
-import React, { useState, useEffect } from 'react'
-import { Alert, Button, Image, ImageBackground, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { TextInput, Button } from 'react-native-paper';
+import { Text, View, StyleSheet, ImageBackground, Image, TouchableHighlight, Alert, TouchableOpacity, ToastAndroid } from 'react-native';
+import React, { useState } from 'react';
+import { createStackNavigator, createAppContainer } from 'react-navigation'
+import auth from '@react-native-firebase/auth'
+import {
+    GoogleSignin,
+    GoogleSigninButton,
+    statusCodes,
+} from '@react-native-google-signin/google-signin';
+import { LoginManager, AccessToken } from 'react-native-fbsdk-next';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { HelperText } from 'react-native-paper';
-import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 
-
-
-
-const Signin = ({ navigation }) => {
-
-
-
-
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [errorMessage, setErrorMessage] = useState('');
-    const [isEmptyEmail, setIsEmptyEmail] = useState(false)
-    const [isEmptyPass, setIsEmptyPass] = useState(false)
-
-    const [errEmail, setErrEmail] = useState('Email address is invalid!');
-    const [errPass, setErrPass] = useState('Password length must be greater than or equal to 8 characters!');
-
-    const onChangeTextEmail = text => setEmail(text);
-    const onChangeTextPassword = text => setPassword(text);
-
-    const hasErrors = (type) => {
-        switch (type) {
-            case 'isEmail': return !email.includes('@gmail.com') && email;
-            case 'isPassword': return password.length < 6 && password;
-            case 'isEmtyEmail': return !email;
-            case 'isEmtyPass': return !password;
-            default: false
+export let emailUser = ""
+const Login = ({ navigation }) => {
+    imageBackground = { uri: 'https://legacy.reactjs.org/logo-og.png' }
+    imageOnFront = { uri: 'https://techvccloud.mediacdn.vn/2020/7/13/137-1594616701190893786687-crop-15946167118531494150206.png' }
+    const [Email, setEmail] = useState("")
+    const [Password, setPassword] = useState("")
+    const [isLoad, setIsLoad] = useState(false)
+    const [setSecurity, IsSetcurity] = useState(true)
+    const handleShowToast = () => {
+        ToastAndroid.showWithGravityAndOffset(
+          'Đăng nhập thành công.',
+          ToastAndroid.LONG,
+          ToastAndroid.BOTTOM,
+          25,
+          50
+        );
+      };
+    const signInWithEmailAndPassword = async (email, password) => {
+        if (Email.includes('@') && Password.length > 0) {
+            try {
+                await auth().signInWithEmailAndPassword(email, password);
+                navigation.navigate('HomeScreen')
+                emailUser = email
+                handleShowToast();
+            } catch (error) {
+                Alert.alert("Email hoặc mật khẩu không đúng")
+            }
+        } else {
+            Alert.alert("Email hoặc mật khẩu không đúng")
         }
     };
-
-    const handleLogin = async (email, password) => {
+    GoogleSignin.configure({
+        webClientId: '120712118691-am2qt37ava7qnrhs2qijgn2i2eke6n66.apps.googleusercontent.com',
+    });
+    const USERS = firestore().collection("USERS");
+    async function onGoogleButtonPress() {
         try {
-            const userCredential = await auth().signInWithEmailAndPassword(email, password);
-            // console.log(userCredential)
-            navigation.navigate('Home', { email: userCredential.user.email, uid: userCredential.user.uid });
+            await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+            // Get the users ID token
+            const { idToken } = await GoogleSignin.signIn();
+
+            // Create a Google credential with the token
+            const googleCredential = auth.GoogleAuthProvider.credential(idToken);
+
+            // Sign-in the user with the credential
+            try {
+
+                await auth().signInWithCredential(googleCredential)
+                .then(()=>
+                USERS.doc(auth().currentUser.email)
+                    .onSnapshot(u => {
+                        if (!u.exists) {
+                            const user = {
+                                Email: auth().currentUser.email,
+                                Role: "Customers"
+                            }
+                            USERS.doc(auth().currentUser.email).set(user)
+                                .then(() => handleShowToast())
+                            navigation.navigate("HomeScreen")
+                            emailUser = auth().currentUser.email
+                            console.log('DangNhap thanh cong');
+                        }else {
+                            navigation.navigate("HomeScreen")
+                            handleShowToast();
+                            emailUser = auth().currentUser.email 
+                            console.log(auth().currentUser.email);
+                        }
+                    }))
+
+            }
+            catch (e) { console.log(e) }
         } catch (error) {
-            setErrorMessage("Email or password is incorrect!");
-            console.error(error);
+            if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+                // user cancelled the login flow
+                console.log("1 " + statusCodes.SIGN_IN_CANCELLED)
+            } else if (error.code === statusCodes.IN_PROGRESS) {
+                // operation (e.g. sign in) is in progress already
+                console.log("2 " + statusCodes.IN_PROGRESS)
+            } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+                // play services not available or outdated
+                console.log("3 " + statusCodes.PLAY_SERVICES_NOT_AVAILABLE)
+            } else {
+                // some other error happened
+                console.log("4 " + error.message)
+            }
         }
-    };
-
-
-
-
+    }
     return (
-        <ScrollView style={styles.container}>
-            <View style={styles.image}>
-                <Image source={require("../assets/logo.png")} />
-            </View>
-            <View style={styles.content}>
-                <View style={styles.title} ><Text style={{ fontSize: 30 }}>LOGIN</Text></View>
-                <View style={styles.txtInput}>
-                    <Icon name='email' size={24} style={{ padding: 12, flex: 0.5, justifyContent: 'center', alignItems: 'center', }} />
-                    <TextInput placeholder='Email' onFocus={() => setIsEmptyEmail(true)} value={email} onChangeText={onChangeTextEmail} style={{ padding: 10, flex: 5, fontSize: 18 }} />
-                </View>
-                {email ? (<HelperText type="error" visible={hasErrors("isEmail")} >
-                    {errEmail}
-                </HelperText>) : (<HelperText type="error" visible={isEmptyEmail}>
-                    Email is required feld
-                </HelperText>)}
+        <View style={styles.container}>
+            <ImageBackground source={imageBackground} resizeMode="cover" style={styles.image}>
+                <View style={styles.containerTilte}>
+                    <Image source={imageOnFront} resizeMode="center" style={styles.imageOnFront} />
+                    <Text style={styles.text}>Đặng Nhập</Text>
+                    <TextInput
+                        style={styles.textInput}
+                        lable="Email"
+                        value={Email}
+                        placeholder="Email"
 
-
-                <View style={styles.txtInput}>
-                    <Icon name='key' size={24} style={{ padding: 12, flex: 0.5, justifyContent: 'center', alignItems: 'center', }} />
-                    <TextInput placeholder='Password' secureTextEntry={true} value={password} onFocus={() => { setErrorMessage(''), setIsEmptyPass(true) }} onChangeText={onChangeTextPassword} style={{ padding: 10, flex: 5, fontSize: 18 }} />
-                    <TouchableOpacity>
-                        <Icon name='visibility' size={24} style={{ padding: 12, flex: 0.5, }} />
+                        underlineColorAndroid="transparent"
+                        onChangeText={text => setEmail(text)}></TextInput>
+                    <TextInput
+                        style={styles.textInput}
+                        lable="Mật khẩu"
+                        value={Password}
+                        placeholder="Password"
+                        mode='outlined'
+                        secureTextEntry={setSecurity}
+                        right={
+                            <TextInput.Icon
+                                name="eye-settings"
+                                onPress={() => {
+                                    IsSetcurity(!setSecurity);
+                                }}
+                            />}
+                        underlineColorAndroid="transparent"
+                        onChangeText={text => setPassword(text)}>
+                    </TextInput>
+                    <Text style={{ color: "white", alignSelf: "flex-end", paddingRight: 60, fontStyle: "italic", fontSize: 15 }} onPress={() => navigation.navigate('Signup')} >Đăng kí ngay</Text>
+                    <Text style={{ color: "white", alignSelf: "flex-start", paddingLeft: 60, bottom: 18, fontStyle: "italic", fontSize: 15 }} onPress={() => navigation.navigate('Forget')} >Quên mật khẩu?</Text>
+                    <Button
+                        style={{ backgroundColor: 'aqua' }}
+                        icon="login"
+                        mode="contained-tonal"
+                        onPress={() => { signInWithEmailAndPassword(Email, Password) }}>Đăng nhập</Button>
+                    <TouchableOpacity style={{ width: 40, height: 40, top: 10 }} onPress={
+                        onGoogleButtonPress
+                    }>
+                        <Image style={{ width: 40, height: 40, top: 10 }} source={require('../assets/google.png')} />
                     </TouchableOpacity>
                 </View>
-                {!errorMessage ? (
-                    password ? (<HelperText type="error" visible={hasErrors("isPassword")} >
-                        {errPass}
-                    </HelperText>) : (<HelperText type="error" visible={isEmptyPass}>
-                        Password is required feld
-                    </HelperText>)
-                ) : (<HelperText type="error" visible={true} >
-                    {errorMessage}
-                </HelperText>)}
+            </ImageBackground>
+        </View>
 
-
-
-                <View style={styles.button}>
-                    <TouchableOpacity onPress={() => handleLogin(email, password)}>
-                        <Text style={{ backgroundColor: 'aqua', borderRadius: 20, paddingHorizontal: 80, paddingVertical: 15 }}>Login</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => navigation.navigate("Signup")} >
-                        <Text style={{ marginVertical: 20, color: '#3479D7' }}>Create a new account</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => navigation.navigate("Forget")} >
-                        <Text style={{ color: '#3479D7' }}>Forget password</Text>
-                    </TouchableOpacity>
-
-                </View>
-
-            </View>
-        </ScrollView >
-
-    )
+    );
 }
-
-export default Signin
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: 'white'
     },
     image: {
         flex: 1,
-        alignItems: 'center',
         justifyContent: 'center',
-        marginTop: 20,
     },
-    content: {
-        flex: 2,
-    },
-    title: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginVertical: 20,
-    },
-    txtInput: {
-        flex: 0.5,
-        borderRadius: 10,
-        borderColor: 'grey',
-        borderWidth: 1.5,
-        paddingHorizontal: 10,
-        flexDirection: 'row',
-        marginHorizontal: 15,
-    },
-    button: {
-        flex: 2,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginVertical: 20,
-    }
+    text:
+    {
 
-})   
+        color: '#fff',
+        fontSize: 42,
+
+    },
+    imageOnFront:
+    {
+        width: 500,
+        height: 200,
+    },
+    containerTilte: {
+        flexDirection: "column",
+        backgroundColor: '#000000c0',
+        fontWeight: 'bold',
+        textAlign: 'center',
+        justifyContent: 'center',
+        alignItems: 'center',
+
+    },
+    textInput:
+    {
+
+        height: 40,
+        width: 300,
+        borderWidth: 1
+    }
+});
+
+
+export default Login 
